@@ -13,6 +13,8 @@ sched = BackgroundScheduler()
 #import pyqtgraph as pg
 import sys
 import time
+from apscheduler.triggers.interval import IntervalTrigger
+import datetime
 from process import Process
 from webcam import Webcam
 from video import Video
@@ -78,7 +80,7 @@ def myfunc():
 
 #class for setting up all the functionality
 class GUI:
-    def __init__(self, vs, jwt, sio, values):
+    def __init__(self, vs, jwt, values):
         super(GUI,self).__init__()
         #self.initUI()
         self.webcam = vs
@@ -111,20 +113,20 @@ def main(gui):
         if(max(gui.process.bpms-np.mean(gui.process.bpms))<5): #show HR if it is stable -the change is not over 5 bpm- for 3s
             hr = float("{:.2f}".format(np.mean(gui.process.bpms)))
             print("Heart rate: " + str(hr) + " bpm")
-            gui.sio.emit('heart.ping', data={"jwt": str(gui.jwt), "value": str(hr)})
+            sio.emit('heart.ping', data={"jwt": str(gui.jwt), "value": str(hr)})
             bp = bloodPressure(hr,gui.values['age'],gui.values['sex'],gui.values['weight'],gui.values['height'])
-            gui.sio.emit('blood.ping', data={"jwt": str(gui.jwt), "value": (bp)})
+            sio.emit('blood.ping', data={"jwt": str(gui.jwt), "value": (bp)})
             arr_sy.append(bp[0])
             arr_dy.append(bp[1])
             arr_hr.append(hr)
 # start function
-import socketio
 import time
 
 # standard Python
-sio = socketio.Client()
-def iAmBatman(videoservice, jwt0, values):
+
+def iAmBatman(videoservice, jwt0, values, sio1):
     global flag
+    global sio
     global average_sy
     global average_hr
     global average_dy
@@ -137,23 +139,26 @@ def iAmBatman(videoservice, jwt0, values):
     arr_hr = []
     flag = 0
     global jwt_me
+    sio = sio1
     jwt_me = jwt0
     average_sy = 0
     average_dy = 0
     average_hr = 0
     len_me = 0
-    job = sched.add_job(myfunc, 'interval', minutes=1)
+    trigger = IntervalTrigger(minutes=1)
+    job = sched.add_job(myfunc, trigger)
     sched.start()
     #print(values)
-    sio.connect('http://deloitte-hack.herokuapp.com/')
     print("starting program")
     while(1):
+        flag = 1
         if(flag):
-            gui = GUI(videoservice, jwt0, sio, values)
+            gui = GUI(videoservice, jwt0, values)
             while(1):
-                main(gui)
-
-@sio.event
-def connect():
-    global flag
-    flag = 1
+                try:
+                    main(gui)
+                except:
+                    print("--------- Heart Rate detector could not find Region of interest ---------")
+                    print("--------------- Readjust the Camera to include you FACE ------------")
+                    print("-------------- Restarting Heart Rate detector --------------")
+                    gui = GUI(videoservice, jwt0, values)
